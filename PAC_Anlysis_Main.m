@@ -430,10 +430,10 @@ function [eegSignal_chXt, samplesToUse_chXt_combined, movement_data_amount, wait
     combined_OutofBoundary_mask(non_nan_mask) = samplesToUse_chXt(non_nan_mask) & OutofBoundary_mask_replicated(non_nan_mask);
     
     % Memory-based standing and moving splits
-    combined_memory_standing_mask = nan(size(samplesToUse_chXt)); % NEW
+    combined_memory_standing_mask = nan(size(samplesToUse_chXt));
     combined_memory_standing_mask(non_nan_mask) = samplesToUse_chXt(non_nan_mask) & memory_standing_mask_replicated(non_nan_mask);
     
-    combined_memory_moving_mask = nan(size(samplesToUse_chXt));   % NEW
+    combined_memory_moving_mask = nan(size(samplesToUse_chXt));
     combined_memory_moving_mask(non_nan_mask) = samplesToUse_chXt(non_nan_mask) & memory_moving_mask_replicated(non_nan_mask);
 
     % Memory without standing (memory_NoStanding)
