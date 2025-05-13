@@ -379,8 +379,8 @@ function [eegSignal_chXt, samplesToUse_chXt_combined, movement_data_amount, wait
     memory_lowMovement_mask_replicated  = repmat(logical_indices_memory_lowMovement, size(samplesToUse_chXt, 1), 1);
     memory_highMovement_mask_replicated = repmat(logical_indices_memory_highMovement, size(samplesToUse_chXt, 1), 1);
     
-    memory_standing_mask_replicated = repmat(logical_indices_memory_standing, size(samplesToUse_chXt, 1), 1); % NEW
-    memory_moving_mask_replicated   = repmat(logical_indices_memory_moving, size(samplesToUse_chXt, 1), 1);   % NEW
+    memory_standing_mask_replicated = repmat(logical_indices_memory_standing, size(samplesToUse_chXt, 1), 1);
+    memory_moving_mask_replicated   = repmat(logical_indices_memory_moving, size(samplesToUse_chXt, 1), 1);  
     
     lowTurn_mask_replicated  = repmat(logical_indices_lowTurn, size(samplesToUse_chXt, 1), 1);
     highTurn_mask_replicated = repmat(logical_indices_highTurn, size(samplesToUse_chXt, 1), 1);
