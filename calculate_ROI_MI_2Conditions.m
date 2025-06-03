@@ -127,93 +127,23 @@ function PAC = calculate_ROI_MI_2Conditions(signal, ...
     end
 end
 
-%% Function for Downsampling + Surrogate MI Calculation
-function MI_stack = perform_downsampling(...
-    LF_phase, HF_amplitude, samplesToUse, ...
+%% Function to Perform Downsampling + Surrogate MI Calculation
+
+function MI_stack = perform_downsampling(LF_phase, HF_amplitude, samplesToUse, ...
     downsampleTarget, nDownsamples, nPhaseBins, doSurrogate, samplingFrequency)
 
-    samplesPerSegment = samplingFrequency;
-
-    % Find all valid data chunks
-    validIndices      = find(samplesToUse);
-    segmentBreaks     = find(diff(validIndices) > 1);
-    segmentStartIdx   = [validIndices(1), validIndices(segmentBreaks+1)];
-    segmentEndIdx     = [validIndices(segmentBreaks), validIndices(end)];
-    possibleSegments  = {};
-    for i = 1:length(segmentStartIdx)
-        segLen = segmentEndIdx(i) - segmentStartIdx(i) + 1;
-        nBlocks = floor(segLen / samplesPerSegment);
-        for b = 0:nBlocks-1
-            idx = segmentStartIdx(i) + b*samplesPerSegment : ...
-                  segmentStartIdx(i)+(b+1)*samplesPerSegment-1;
-            possibleSegments{end+1} = idx;
-        end
-    end
-
-    totalBlocks = length(possibleSegments);
-    nBlocksToSample = min(totalBlocks, round(downsampleTarget/samplesPerSegment));
-
-    MI_stack = zeros(nDownsamples,1);
-    nSurrogates = 500; % Make smaller for testing
-
-    for dIdx = 1:nDownsamples
-        % Pick random chunks to match target data length
-        pickIdx      = randsample(totalBlocks, nBlocksToSample, false);
-        selectedSegs = possibleSegments(pickIdx);
-        finalSamples = horzcat(selectedSegs{:});
-
-        % Observed MI
-        MI_obs = calcModulationIndex_Tort2010( ...
-            LF_phase(finalSamples), HF_amplitude(finalSamples), nPhaseBins);
-
-        if doSurrogate
-            surrogateMI = zeros(nSurrogates,1);
-            L = length(finalSamples);
-
-            for s = 1:nSurrogates
-                if doSurrogate == 2
-                    % Circshift surrogate (cross-check)
-                    minOff = round(0.2*samplingFrequency);
-                    offset = randi([minOff+1, L-1]);
-                    amp_surr = circshift(HF_amplitude(finalSamples), offset);
-                    surrogateMI(s) = calcModulationIndex_Tort2010( ...
-                        LF_phase(finalSamples), amp_surr, nPhaseBins);
-                else % Block shuffle surrogate (default)
-                    permOrder  = randperm(numel(selectedSegs));
-                    permSegs   = selectedSegs(permOrder);
-                    permSamples= horzcat(permSegs{:});
-                    surrogateMI(s) = calcModulationIndex_Tort2010( ...
-                        LF_phase(permSamples), HF_amplitude(permSamples), nPhaseBins);
-                end
-            end
-
-            mu = mean(surrogateMI);
-            sigma = std(surrogateMI);
-            if sigma == 0
-                MI_stack(dIdx) = 0;
-            else
-                MI_stack(dIdx) = (MI_obs - mu)/sigma;
-            end
-        else
-            % If no surrogate => just raw MI
-            MI_stack(dIdx) = MI_obs;
-        end
-    end
-end
-
-
-%% Function to Perform Surrogate MI Calculation on Full (Non-Downsampled) Data
-function zMI = perform_surrogate_calculation(LF_phase, HF_amplitude, samplesToUse, nPhaseBins, doSurrogate, samplingFrequency)
-    
-    samplesPerSegment = samplingFrequency; 
+    samplesPerSegment = samplingFrequency * 1;
 
     validIndices = find(samplesToUse);
+
+    % Identify segment breaks
     segmentBreaks = find(diff(validIndices) > 1);
     segmentStartIndices = [validIndices(1), validIndices(segmentBreaks + 1)];
     segmentEndIndices   = [validIndices(segmentBreaks), validIndices(end)];
     segmentLengths      = segmentEndIndices - segmentStartIndices + 1;
 
-    possibleSegments = {}; % Possible number of 1s segments
+    % Precompute all valid non-overlapping 1-second segments
+    possibleSegments = {};
     for i = 1:length(segmentStartIndices)
         startIdx = segmentStartIndices(i);
         numFullSegments = floor(segmentLengths(i) / samplesPerSegment);
@@ -223,47 +153,93 @@ function zMI = perform_surrogate_calculation(LF_phase, HF_amplitude, samplesToUs
     end
 
     totalAvailableSegments = length(possibleSegments);
+    numSegmentsToSample = min(totalAvailableSegments, round(downsampleTarget / samplesPerSegment));
 
-    % For full-data surrogate, use all available segments
-    numSegmentsToSample = totalAvailableSegments;
-    finalSelectedSamples = horzcat(possibleSegments{:});
-    
-    % Compute observed MI
-    MI_obs = calcModulationIndex_Tort2010( ...
-        LF_phase(finalSelectedSamples), HF_amplitude(finalSelectedSamples), nPhaseBins);
+    MI_stack = zeros(nDownsamples, 1);
+    nSurrogates = 200;
 
-    if doSurrogate
-        nSurrogates = 500; % Make smaller for testing
-        surrogateMI = zeros(nSurrogates, 1);
-        minOffset = round(0.2 * samplingFrequency);
-        L = length(finalSelectedSamples);
+    for dIdx = 1:nDownsamples
 
-        for s = 1:nSurrogates
-            if doSurrogate == 2 % Circshift surrogate (cross-check)
-                offset = randi([minOffset+1, L-1]);
-                HF_amplitude_sur = circshift(HF_amplitude(finalSelectedSamples), offset);
-                
-                surrogateMI(s) = calcModulationIndex_Tort2010( ...
-                    LF_phase(finalSelectedSamples), HF_amplitude_sur, nPhaseBins);
-            else % Block shuffle surrogate (default)
-                permOrder = randperm(length(possibleSegments));
-                permSegs  = possibleSegments(permOrder);
-                permSamples = horzcat(permSegs{:});
-                
-                surrogateMI(s) = calcModulationIndex_Tort2010( ...
-                    LF_phase(permSamples), HF_amplitude(permSamples), ...
-                    nPhaseBins);
+        % Randomly select segments (without replacement)
+        selectedSegmentIndices = randsample(1:totalAvailableSegments, numSegmentsToSample, false);
+        selectedSegments = possibleSegments(selectedSegmentIndices);
+        finalSelectedSamples = horzcat(selectedSegments{:});
+
+        % Compute observed MI
+        MI_obs = calcModulationIndex_Tort2010( ...
+            LF_phase(finalSelectedSamples), HF_amplitude(finalSelectedSamples), nPhaseBins);
+
+        if doSurrogate
+            phase_vec = LF_phase(finalSelectedSamples);
+            amp_vec   = HF_amplitude(finalSelectedSamples);
+
+            nSeg = ceil(length(phase_vec) / samplesPerSegment);
+            nFill = nSeg*samplesPerSegment - length(phase_vec);
+            phase_padded = [phase_vec; nan(nFill,1)];
+
+            phase_segments = reshape(phase_padded, samplesPerSegment, nSeg);
+
+            surrogateMI = zeros(nSurrogates, 1);
+            parfor s = 1:nSurrogates
+                permIdx = randperm(nSeg);
+                phase_shuffled = phase_segments(:,permIdx);
+                phase_shuffled = phase_shuffled(:);
+                phase_shuffled = phase_shuffled(~isnan(phase_shuffled));
+                surrogateMI(s) = calcModulationIndex_Tort2010(phase_shuffled, amp_vec, nPhaseBins);
             end
-        end
-        surrogateMean = mean(surrogateMI);
-        surrogateStd = std(surrogateMI);
-        if surrogateStd == 0
-            zMI = 0;
+
+            surrogateMean = mean(surrogateMI);
+            surrogateStd  = std(surrogateMI);
+
+            if surrogateStd == 0
+                zMI = 0;
+            else
+                zMI = (MI_obs - surrogateMean) / surrogateStd;
+            end
+            MI_stack(dIdx) = zMI;
+
         else
-            zMI = (MI_obs - surrogateMean) / surrogateStd;
+            MI_stack(dIdx) = MI_obs;
         end
-    else
-        zMI = MI_obs;
     end
+end
+
+
+%% Function to Perform Surrogate MI Calculation on Full (Non-Downsampled) Data
+
+function zMI = perform_surrogate_calculation( ...
+        LF_phase, HF_amplitude, samplesToUse, nPhaseBins, doSurrogate, samplingFrequency)
+
+    phase_vec = LF_phase(samplesToUse).'; % row
+    amp_vec = HF_amplitude(samplesToUse).'; % row
+    N = numel(phase_vec);
+
+    MI_obs = calcModulationIndex_Tort2010(phase_vec, amp_vec, nPhaseBins);
+
+    if ~doSurrogate
+        zMI = MI_obs;
+        return
+    end
+
+    nSamplesPerBlock = samplingFrequency * 1;      
+    nBlocks = ceil(N / nSamplesPerBlock);
+    nPad = nBlocks * nSamplesPerBlock - N;
+    phase_vec(end+1:end+nPad) = NaN;    
+
+    phase_mat = reshape(phase_vec, nSamplesPerBlock, nBlocks);
+
+    nSur = 200;
+    MI_surr = zeros(1, nSur);
+
+    parfor s = 1:nSur
+        p_shuf = phase_mat(:, randperm(nBlocks)); % permute
+        p_shuf = p_shuf(:); % flatten
+        p_shuf = p_shuf(~isnan(p_shuf));  % drop padded NaNs
+        MI_surr(s) = calcModulationIndex_Tort2010(p_shuf, amp_vec, nPhaseBins);
+    end
+
+    muS = mean(MI_surr);
+    sdS = std(MI_surr);
+    zMI = (MI_obs - muS) / sdS;
 end
 
