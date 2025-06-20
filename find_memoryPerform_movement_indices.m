@@ -248,8 +248,7 @@ function [memory_logical, memory_good_logical, memory_bad_logical, ...
         lower_cutoff = prctile(detour_percentage, 33);
         upper_cutoff = prctile(detour_percentage, 66);
         
-        % Reinitialize memory
-        memory_logical(:)      = 0;
+        % Initialize
         memory_good_logical(:) = 0;
         memory_bad_logical(:)  = 0;
         
@@ -294,17 +293,17 @@ function [memory_logical, memory_good_logical, memory_bad_logical, ...
                 this_val = detourVals_final(k);
 
                 if this_val <= lower_cutoff
+
                     memory_good_logical(seg_int) = 1;
-                    memory_logical(seg_int) = 1;
+    
                 elseif this_val >= upper_cutoff
                     memory_bad_logical(seg_int) = 1;
-                    memory_logical(seg_int) = 1;
                 end
             end
         end
 
-        % Update detour_percentage
-        detour_percentage = detourVals_final;
+%         % Update detour_percentage
+%         detour_percentage = detourVals_final;
     end
 
     % 7) Mark waiting segments (phase 3)
