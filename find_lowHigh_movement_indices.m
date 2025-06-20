@@ -30,7 +30,7 @@ function [logical_indices_lowMovement, logical_indices_highMovement, ...
 %   - Balance san checks: ~5% imbalance warnings for movement and turning splits.
 
     if nargin < 4
-        turningWindowSize = 25; 
+        turningWindowSize = 250; 
     end
     if nargin < 5
         smoothingWindowSize = 0;
